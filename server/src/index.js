@@ -9,6 +9,10 @@ import authRoutes from './routes/auth.js';
 import attendanceRoutes from './routes/attendance.js';
 import officeRoutes from './routes/office.js';
 import usersRoutes from './routes/users.js';
+import departmentsRoutes from './routes/departments.js';
+import locationsRoutes from './routes/locations.js';
+import rolesRoutes from './routes/roles.js';
+import shiftsRoutes from './routes/shifts.js';
 import adminRoutes from './routes/admin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,6 +28,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/office', officeRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/departments', departmentsRoutes);
+app.use('/api/locations', locationsRoutes);
+app.use('/api/roles', rolesRoutes);
+app.use('/api/shifts', shiftsRoutes);
 
 app.use('/admin', express.static(adminPath));
 app.use('/admin', adminRoutes);
