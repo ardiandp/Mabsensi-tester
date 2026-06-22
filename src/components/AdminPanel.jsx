@@ -1,69 +1,74 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, 
-  MapPin, 
-  Settings, 
-  Calendar, 
-  Clock, 
-  Check, 
-  Camera, 
-  Search, 
+import {
+  Users,
+  MapPin,
+  Settings,
+  Calendar,
+  Clock,
+  Search,
   Navigation,
   Save,
   AlertCircle
 } from 'lucide-react';
-import { getAdminStats, getOfficeConfig, updateOfficeConfig } from '../utils/mockData';
+import { getAdminStats, getOfficeConfig, updateOfficeConfig } from '../services/api';
 
 export default function AdminPanel({ onShowToast }) {
-  const [activeTab, setActiveTab] = useState('reports'); // 'reports' or 'settings'
+  const [activeTab, setActiveTab] = useState('reports');
   const [stats, setStats] = useState(null);
-  
-  // Office settings state
+  const [loading, setLoading] = useState(true);
+
   const [officeName, setOfficeName] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [radius, setRadius] = useState("");
   const [activePhoto, setActivePhoto] = useState(null);
-  
-  // Search filter
   const [searchTerm, setSearchTerm] = useState("");
 
-  const refreshData = () => {
-    const adminStats = getAdminStats();
-    setStats(adminStats);
-    
-    const config = getOfficeConfig();
-    setOfficeName(config.name);
-    setLatitude(config.latitude.toString());
-    setLongitude(config.longitude.toString());
-    setRadius(config.radius.toString());
+  const refreshData = async () => {
+    setLoading(true);
+    try {
+      const adminStats = await getAdminStats();
+      setStats(adminStats);
+
+      const config = await getOfficeConfig();
+      setOfficeName(config.name);
+      setLatitude(config.latitude.toString());
+      setLongitude(config.longitude.toString());
+      setRadius(config.radius.toString());
+    } catch {
+      onShowToast("Gagal memuat data");
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
     refreshData();
   }, []);
 
-  const handleSaveSettings = (e) => {
+  const handleSaveSettings = async (e) => {
     e.preventDefault();
-    
+
     const latNum = parseFloat(latitude);
     const lngNum = parseFloat(longitude);
     const radNum = parseInt(radius);
-    
+
     if (isNaN(latNum) || isNaN(lngNum) || isNaN(radNum)) {
       onShowToast("Format input koordinat / radius salah!");
       return;
     }
-    
-    updateOfficeConfig({
-      name: officeName,
-      latitude: latNum,
-      longitude: lngNum,
-      radius: radNum
-    });
-    
-    onShowToast("Konfigurasi kantor berhasil diperbarui!");
-    refreshData();
+
+    try {
+      await updateOfficeConfig({
+        name: officeName,
+        latitude: latNum,
+        longitude: lngNum,
+        radius: radNum
+      });
+      onShowToast("Konfigurasi kantor berhasil diperbarui!");
+      refreshData();
+    } catch {
+      onShowToast("Gagal menyimpan konfigurasi");
+    }
   };
 
   const useCurrentLocation = () => {
@@ -71,7 +76,7 @@ export default function AdminPanel({ onShowToast }) {
       onShowToast("Geolocation tidak didukung browser ini.");
       return;
     }
-    
+
     onShowToast("Mendeteksi lokasi Anda...");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -79,7 +84,7 @@ export default function AdminPanel({ onShowToast }) {
         setLongitude(pos.coords.longitude.toString());
         onShowToast("Koordinat berhasil disesuaikan dengan GPS Anda!");
       },
-      (err) => {
+      () => {
         onShowToast("Gagal mengambil lokasi GPS. Masukkan manual.");
       },
       { enableHighAccuracy: true }
@@ -88,36 +93,34 @@ export default function AdminPanel({ onShowToast }) {
 
   const formatDate = (dateStr) => {
     const d = new Date(dateStr);
-    return d.toLocaleDateString("id-ID", { 
-      day: "2-digit", 
-      month: "short", 
-      year: "numeric" 
+    return d.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric"
     });
   };
 
-  if (!stats) return <p className="text-muted">Loading...</p>;
+  if (loading && !stats) return <div className="admin-view"><p className="text-muted">Loading...</p></div>;
 
-  // Filter logs by search term
-  const filteredLogs = stats.logs.filter(log => 
+  const filteredLogs = stats ? stats.logs.filter(log =>
     log.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     log.userPosition.toLowerCase().includes(searchTerm.toLowerCase()) ||
     log.status.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  ) : [];
 
   return (
     <div className="admin-view">
       <div className="section-title">Panel Admin</div>
 
-      {/* Tabs */}
       <div className="tab-container">
-        <button 
+        <button
           className={`tab-btn ${activeTab === 'reports' ? 'active' : ''}`}
           onClick={() => setActiveTab('reports')}
         >
           <Calendar size={14} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
           Laporan
         </button>
-        <button 
+        <button
           className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
           onClick={() => setActiveTab('settings')}
         >
@@ -128,7 +131,6 @@ export default function AdminPanel({ onShowToast }) {
 
       {activeTab === 'reports' ? (
         <div>
-          {/* Stats Grid */}
           <div className="stats-grid">
             <div className="stat-card stat-card-blue">
               <div>
@@ -136,7 +138,7 @@ export default function AdminPanel({ onShowToast }) {
                 <div className="stat-label">Total Karyawan</div>
               </div>
             </div>
-            
+
             <div className="stat-card stat-card-green">
               <div>
                 <div className="stat-value">{stats.checkedInToday}</div>
@@ -159,21 +161,19 @@ export default function AdminPanel({ onShowToast }) {
             </div>
           </div>
 
-          {/* Search bar */}
           <div className="form-group" style={{ marginBottom: 16 }}>
             <div className="input-wrapper">
               <Search className="input-icon" size={16} />
-              <input 
-                type="text" 
-                placeholder="Cari karyawan atau status..." 
-                className="form-input" 
+              <input
+                type="text"
+                placeholder="Cari karyawan atau status..."
+                className="form-input"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
           </div>
 
-          {/* Logs List */}
           <div className="section-title" style={{ fontSize: '0.95rem' }}>
             <span>Log Kehadiran Semua</span>
             <span className="text-muted" style={{ fontSize: '0.75rem' }}>{filteredLogs.length} Entri</span>
@@ -205,40 +205,39 @@ export default function AdminPanel({ onShowToast }) {
                   </div>
                   <div>
                     <span className="text-muted">Jarak Check-in: </span>
-                    <strong style={{ color: log.isOutOfRangeCheckIn ? 'var(--danger)' : 'var(--success)' }}>
-                      {log.distanceCheckIn}m
+                    <strong style={{ color: log.is_out_of_range_check_in ? 'var(--danger)' : 'var(--success)' }}>
+                      {log.distance_check_in}m
                     </strong>
                   </div>
                   <div>
                     <span className="text-muted">Check-in: </span>
-                    <strong style={{ color: 'var(--text-main)' }}>{log.checkInTime}</strong>
+                    <strong style={{ color: 'var(--text-main)' }}>{log.check_in_time}</strong>
                   </div>
                   <div>
                     <span className="text-muted">Check-out: </span>
-                    <strong style={{ color: 'var(--text-main)' }}>{log.checkOutTime || '--:--'}</strong>
+                    <strong style={{ color: 'var(--text-main)' }}>{log.check_out_time || '--:--'}</strong>
                   </div>
                 </div>
 
-                {/* Selfie Previews */}
                 <div style={{ display: 'flex', gap: 10, marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                  {log.checkInPhoto && (
+                  {log.check_in_photo && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <img 
-                        src={log.checkInPhoto} 
-                        alt="Check In" 
+                      <img
+                        src={log.check_in_photo}
+                        alt="Check In"
                         className="admin-log-photo"
-                        onClick={() => setActivePhoto(log.checkInPhoto)}
+                        onClick={() => setActivePhoto(log.check_in_photo)}
                       />
                       <span className="text-muted" style={{ fontSize: '0.7rem' }}>Selfie Masuk</span>
                     </div>
                   )}
-                  {log.checkOutPhoto && (
+                  {log.check_out_photo && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <img 
-                        src={log.checkOutPhoto} 
-                        alt="Check Out" 
+                      <img
+                        src={log.check_out_photo}
+                        alt="Check Out"
                         className="admin-log-photo"
-                        onClick={() => setActivePhoto(log.checkOutPhoto)}
+                        onClick={() => setActivePhoto(log.check_out_photo)}
                       />
                       <span className="text-muted" style={{ fontSize: '0.7rem' }}>Selfie Pulang</span>
                     </div>
@@ -249,55 +248,54 @@ export default function AdminPanel({ onShowToast }) {
           )}
         </div>
       ) : (
-        /* Settings Tab */
         <div className="card">
           <h4 style={{ fontWeight: 700, marginBottom: 16 }}>Koordinat Radius Kantor</h4>
           <form onSubmit={handleSaveSettings}>
             <div className="form-group">
               <label className="form-label">Nama Lokasi Kantor</label>
-              <input 
-                type="text" 
-                className="form-input" 
+              <input
+                type="text"
+                className="form-input"
                 style={{ paddingLeft: 14 }}
-                value={officeName} 
-                onChange={(e) => setOfficeName(e.target.value)} 
-                required 
+                value={officeName}
+                onChange={(e) => setOfficeName(e.target.value)}
+                required
               />
             </div>
 
             <div className="form-group">
               <label className="form-label">Latitude</label>
-              <input 
-                type="text" 
-                className="form-input" 
+              <input
+                type="text"
+                className="form-input"
                 style={{ paddingLeft: 14 }}
-                value={latitude} 
-                onChange={(e) => setLatitude(e.target.value)} 
-                required 
+                value={latitude}
+                onChange={(e) => setLatitude(e.target.value)}
+                required
               />
             </div>
 
             <div className="form-group">
               <label className="form-label">Longitude</label>
-              <input 
-                type="text" 
-                className="form-input" 
+              <input
+                type="text"
+                className="form-input"
                 style={{ paddingLeft: 14 }}
-                value={longitude} 
-                onChange={(e) => setLongitude(e.target.value)} 
-                required 
+                value={longitude}
+                onChange={(e) => setLongitude(e.target.value)}
+                required
               />
             </div>
 
             <div className="form-group" style={{ marginBottom: 20 }}>
               <label className="form-label">Radius Kehadiran (meter)</label>
-              <input 
-                type="number" 
-                className="form-input" 
+              <input
+                type="number"
+                className="form-input"
                 style={{ paddingLeft: 14 }}
-                value={radius} 
-                onChange={(e) => setRadius(e.target.value)} 
-                required 
+                value={radius}
+                onChange={(e) => setRadius(e.target.value)}
+                required
               />
             </div>
 
@@ -306,7 +304,7 @@ export default function AdminPanel({ onShowToast }) {
                 <Navigation size={16} />
                 Gunakan Lokasi Saya Saat Ini
               </button>
-              
+
               <button type="submit" className="btn btn-primary">
                 <Save size={16} />
                 Simpan Perubahan
@@ -316,7 +314,6 @@ export default function AdminPanel({ onShowToast }) {
         </div>
       )}
 
-      {/* Photo Viewer Modal */}
       {activePhoto && (
         <div className="photo-viewer-modal" onClick={() => setActivePhoto(null)}>
           <img src={activePhoto} alt="Absensi Selfie" className="photo-viewer-img" />

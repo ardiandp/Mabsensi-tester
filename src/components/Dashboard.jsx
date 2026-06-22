@@ -1,39 +1,48 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Clock, 
-  MapPin, 
-  UserCheck, 
-  LogOut, 
-  Camera, 
-  Calendar, 
+import {
+  Clock,
+  MapPin,
+  UserCheck,
+  LogOut,
+  Camera,
+  Calendar,
   Briefcase,
   Moon,
   Sun,
   Shield
 } from 'lucide-react';
-import { getTodayStatus, getOfficeConfig, calculateDistance } from '../utils/mockData';
+import { getOfficeConfig } from '../services/api';
+import { calculateDistance } from '../utils/mockData';
 
 export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatus, refreshStatus, theme, toggleTheme }) {
   const [time, setTime] = useState(new Date());
   const [distanceInfo, setDistanceInfo] = useState({ distance: null, inRange: false });
   const [locLoading, setLocLoading] = useState(true);
+  const [office, setOffice] = useState({ name: 'Memuat...', latitude: 0, longitude: 0, radius: 100 });
 
-  // Update clock every second
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Check current GPS coordinates to show real-time distance to office
   useEffect(() => {
-    if (!navigator.geolocation) {
+    const loadOffice = async () => {
+      try {
+        const config = await getOfficeConfig();
+        setOffice(config);
+      } catch {
+        setOffice({ name: 'Kantor Pusat Jakarta', latitude: -6.2008406, longitude: 106.8273081, radius: 100 });
+      }
+    };
+    loadOffice();
+  }, [todayStatus]);
+
+  useEffect(() => {
+    if (!navigator.geolocation || office.latitude === 0) {
       setLocLoading(false);
       return;
     }
 
-    const office = getOfficeConfig();
-    
-    // Watch position or get current position
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
@@ -50,31 +59,28 @@ export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatu
       },
       { enableHighAccuracy: true }
     );
-  }, [todayStatus]);
+  }, [todayStatus, office.latitude, office.longitude, office.radius]);
 
   const formatTime = (date) => {
     return date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   };
 
   const formatDate = (date) => {
-    return date.toLocaleDateString("id-ID", { 
-      weekday: "long", 
-      year: "numeric", 
-      month: "long", 
-      day: "numeric" 
+    return date.toLocaleDateString("id-ID", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric"
     });
   };
 
-  const office = getOfficeConfig();
-
   return (
     <div className="dashboard-view">
-      {/* Header Profile */}
       <div className="user-profile card">
-        <img 
-          src={user.avatar} 
-          alt={user.name} 
-          className="avatar" 
+        <img
+          src={user.avatar}
+          alt={user.name}
+          className="avatar"
           onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150" }}
         />
         <div style={{ flex: 1 }}>
@@ -84,7 +90,7 @@ export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatu
             <span className="text-muted" style={{ fontSize: '0.8rem' }}>{user.position}</span>
           </div>
         </div>
-        
+
         <div style={{ display: 'flex', gap: 6 }}>
           {user.role === 'admin' && (
             <button className="icon-btn" title="Admin Panel" style={{ color: 'var(--primary)' }}>
@@ -100,9 +106,7 @@ export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatu
         </div>
       </div>
 
-      {/* Clock Section */}
       <div className="card clock-container" style={{ position: 'relative', overflow: 'hidden' }}>
-        {/* Background glow decoration */}
         <div style={{
           position: 'absolute',
           top: '-50%',
@@ -126,13 +130,12 @@ export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatu
         </div>
       </div>
 
-      {/* Office & GPS Status */}
       <div className="card">
         <div className="section-title">
           <span>Lokasi Anda</span>
           <span className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 500 }}>GPS Aktif</span>
         </div>
-        
+
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           <div style={{
             backgroundColor: distanceInfo.inRange ? 'var(--success-light)' : 'var(--danger-light)',
@@ -145,7 +148,7 @@ export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatu
           }}>
             <MapPin size={22} />
           </div>
-          
+
           <div style={{ flex: 1, fontSize: '0.85rem' }}>
             <p style={{ fontWeight: 600, color: 'var(--text-main)' }}>{office.name}</p>
             <p className="text-muted" style={{ marginTop: 2 }}>
@@ -154,10 +157,10 @@ export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatu
             {locLoading ? (
               <p style={{ color: 'var(--primary)', fontWeight: 500, marginTop: 4 }}>Mengukur jarak...</p>
             ) : distanceInfo.distance !== null ? (
-              <p style={{ 
-                color: distanceInfo.inRange ? 'var(--success)' : 'var(--danger)', 
-                fontWeight: 600, 
-                marginTop: 4 
+              <p style={{
+                color: distanceInfo.inRange ? 'var(--success)' : 'var(--danger)',
+                fontWeight: 600,
+                marginTop: 4
               }}>
                 Jarak Anda: ±{distanceInfo.distance} meter ({distanceInfo.inRange ? 'Dalam Radius' : 'Di Luar Radius'})
               </p>
@@ -168,18 +171,17 @@ export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatu
         </div>
       </div>
 
-      {/* Attendance Check-in / Check-out Panel */}
       <div className="card">
         <div className="section-title">Aksi Absensi</div>
-        
+
         <div className="attendance-grid">
           <div className="attendance-card">
             <span className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 600 }}>CHECK-IN</span>
             {todayStatus ? (
               <>
-                <span className="attendance-time">{todayStatus.checkInTime}</span>
-                <span style={{ fontSize: '0.7rem', color: todayStatus.isOutOfRangeCheckIn ? 'var(--danger)' : 'var(--success)', fontWeight: 600 }}>
-                  {todayStatus.isOutOfRangeCheckIn ? 'Luar Kantor' : 'Dalam Kantor'}
+                <span className="attendance-time">{todayStatus.check_in_time}</span>
+                <span style={{ fontSize: '0.7rem', color: todayStatus.is_out_of_range_check_in ? 'var(--danger)' : 'var(--success)', fontWeight: 600 }}>
+                  {todayStatus.is_out_of_range_check_in ? 'Luar Kantor' : 'Dalam Kantor'}
                 </span>
               </>
             ) : (
@@ -192,11 +194,11 @@ export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatu
 
           <div className="attendance-card">
             <span className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 600 }}>CHECK-OUT</span>
-            {todayStatus && todayStatus.checkOutTime ? (
+            {todayStatus && todayStatus.check_out_time ? (
               <>
-                <span className="attendance-time">{todayStatus.checkOutTime}</span>
-                <span style={{ fontSize: '0.7rem', color: todayStatus.isOutOfRangeCheckOut ? 'var(--danger)' : 'var(--success)', fontWeight: 600 }}>
-                  {todayStatus.isOutOfRangeCheckOut ? 'Luar Kantor' : 'Dalam Kantor'}
+                <span className="attendance-time">{todayStatus.check_out_time}</span>
+                <span style={{ fontSize: '0.7rem', color: todayStatus.is_out_of_range_check_out ? 'var(--danger)' : 'var(--success)', fontWeight: 600 }}>
+                  {todayStatus.is_out_of_range_check_out ? 'Luar Kantor' : 'Dalam Kantor'}
                 </span>
               </>
             ) : (
@@ -210,8 +212,8 @@ export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatu
 
         <div style={{ marginTop: 16 }}>
           {!todayStatus ? (
-            <button 
-              className="btn btn-primary" 
+            <button
+              className="btn btn-primary"
               onClick={() => onOpenAttendance('in')}
               disabled={!distanceInfo.inRange && distanceInfo.distance !== null}
               style={{
@@ -222,9 +224,9 @@ export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatu
               <Camera size={18} />
               Check-in Sekarang
             </button>
-          ) : !todayStatus.checkOutTime ? (
-            <button 
-              className="btn btn-danger" 
+          ) : !todayStatus.check_out_time ? (
+            <button
+              className="btn btn-danger"
               onClick={() => onOpenAttendance('out')}
               disabled={!distanceInfo.inRange && distanceInfo.distance !== null}
               style={{
@@ -241,8 +243,8 @@ export default function Dashboard({ user, onLogout, onOpenAttendance, todayStatu
               Kehadiran Hari Ini Selesai
             </div>
           )}
-          
-          {!distanceInfo.inRange && distanceInfo.distance !== null && !todayStatus?.checkOutTime && (
+
+          {!distanceInfo.inRange && distanceInfo.distance !== null && !todayStatus?.check_out_time && (
             <p style={{ color: 'var(--danger)', fontSize: '0.75rem', textAlign: 'center', marginTop: 8, fontWeight: 500 }}>
               *Anda berada di luar radius kantor ({distanceInfo.distance}m). Tombol dinonaktifkan untuk mencegah kecurangan.
             </p>

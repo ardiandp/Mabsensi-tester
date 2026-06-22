@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Camera, MapPin, CheckCircle, RotateCcw, AlertTriangle } from 'lucide-react';
-import { checkIn, checkOut, getOfficeConfig, calculateDistance } from '../utils/mockData';
+import { checkIn, checkOut, getOfficeConfig } from '../services/api';
+import { calculateDistance } from '../utils/mockData';
 
 export default function AttendanceModal({ type, user, onClose, onShowToast, onSuccess }) {
-  const [step, setStep] = useState(1); // 1: Camera capture, 2: GPS verify, 3: Success
+  const [step, setStep] = useState(1);
   const [stream, setStream] = useState(null);
   const [photo, setPhoto] = useState(null);
   const [coords, setCoords] = useState(null);
@@ -12,22 +13,30 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
   const [locLoading, setLocLoading] = useState(true);
   const [cameraError, setCameraError] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [office, setOffice] = useState({ latitude: -6.2008406, longitude: 106.8273081, radius: 100 });
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const office = getOfficeConfig();
 
-  // Start Camera
+  useEffect(() => {
+    const loadOffice = async () => {
+      try {
+        const config = await getOfficeConfig();
+        setOffice(config);
+      } catch {
+        // use defaults
+      }
+    };
+    loadOffice();
+  }, []);
+
   useEffect(() => {
     if (step === 1 && !photo) {
       startCamera();
     }
-    return () => {
-      stopCamera();
-    };
+    return () => { stopCamera(); };
   }, [step, photo]);
 
-  // Fetch Location
   useEffect(() => {
     if (step === 2) {
       getGPSLocation();
@@ -45,8 +54,7 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
-    } catch (err) {
-      console.error("Camera access error:", err);
+    } catch {
       setCameraError(true);
     }
   };
@@ -60,11 +68,9 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
 
   const capturePhoto = () => {
     if (cameraError) {
-      // Fallback: Use a generic profile picture or Unsplash portrait for simulation
-      const randomId = Math.floor(Math.random() * 100);
       const simulatedPhoto = `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400`;
       setPhoto(simulatedPhoto);
-      setStep(2); // Proceed to GPS
+      setStep(2);
       return;
     }
 
@@ -72,23 +78,19 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
-      
+
       canvas.width = video.videoWidth || 640;
       canvas.height = video.videoHeight || 480;
-      
-      // Mirror the draw because camera preview is mirrored
+
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
-      
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Reset transform
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      
+
       const dataUrl = canvas.toDataURL('image/jpeg');
       setPhoto(dataUrl);
       stopCamera();
-      setStep(2); // Proceed to GPS
+      setStep(2);
     }
   };
 
@@ -100,7 +102,7 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
   const getGPSLocation = () => {
     setLocLoading(true);
     setLocStatus("Mendeteksi lokasi...");
-    
+
     if (!navigator.geolocation) {
       setLocStatus("Geolocation tidak didukung oleh browser ini.");
       setLocLoading(false);
@@ -112,24 +114,22 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
         const { latitude, longitude } = pos.coords;
         const distance = calculateDistance(latitude, longitude, office.latitude, office.longitude);
         const inRange = distance <= office.radius;
-        
+
         setCoords({ lat: latitude, lng: longitude, distance });
         setLocInRange(inRange);
         setLocLoading(false);
         setLocStatus(`Berhasil. Jarak ke kantor: ±${Math.round(distance)} meter.`);
       },
-      (err) => {
-        console.warn("GPS Permission or signal error, loading simulation coordinate...", err);
-        // Simulation Fallback: Office coordinate + small offset
+      () => {
         setTimeout(() => {
-          const latOffset = (Math.random() - 0.5) * 0.0005; // ~50m offset
+          const latOffset = (Math.random() - 0.5) * 0.0005;
           const lngOffset = (Math.random() - 0.5) * 0.0005;
           const simLat = office.latitude + latOffset;
           const simLng = office.longitude + lngOffset;
-          
+
           const distance = calculateDistance(simLat, simLng, office.latitude, office.longitude);
           const inRange = distance <= office.radius;
-          
+
           setCoords({ lat: simLat, lng: simLng, distance });
           setLocInRange(inRange);
           setLocLoading(false);
@@ -140,30 +140,28 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
     );
   };
 
-  const submitAttendance = () => {
+  const submitAttendance = async () => {
     setIsSubmitting(true);
-    
-    setTimeout(() => {
-      const lat = coords ? coords.lat : office.latitude;
-      const lng = coords ? coords.lng : office.longitude;
-      
-      let res;
-      if (type === 'in') {
-        res = checkIn(user.id, photo, lat, lng);
-      } else {
-        res = checkOut(user.id, photo, lat, lng);
-      }
-      
-      setIsSubmitting(false);
-      
-      if (res.success) {
-        setStep(3); // Go to success step
-        onShowToast(`Absen ${type === 'in' ? 'Masuk' : 'Pulang'} berhasil dicatat!`);
-      } else {
-        onShowToast(res.message);
-        onClose();
-      }
-    }, 1000);
+
+    const lat = coords ? coords.lat : office.latitude;
+    const lng = coords ? coords.lng : office.longitude;
+
+    let res;
+    if (type === 'in') {
+      res = await checkIn(user.id, photo, lat, lng);
+    } else {
+      res = await checkOut(user.id, photo, lat, lng);
+    }
+
+    setIsSubmitting(false);
+
+    if (res.success) {
+      setStep(3);
+      onShowToast(`Absen ${type === 'in' ? 'Masuk' : 'Pulang'} berhasil dicatat!`);
+    } else {
+      onShowToast(res.message);
+      onClose();
+    }
   };
 
   return (
@@ -178,13 +176,12 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
           </button>
         </div>
 
-        {/* STEP 1: Take Photo */}
         {step === 1 && (
           <div>
             <p className="text-muted" style={{ marginBottom: 12 }}>
               Silakan ambil foto selfie untuk verifikasi wajah.
             </p>
-            
+
             <div className="camera-preview">
               {cameraError ? (
                 <div style={{ textAlign: 'center', padding: 20 }}>
@@ -198,9 +195,9 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
                 <video ref={videoRef} autoPlay playsInline className="camera-video" />
               )}
             </div>
-            
+
             <canvas ref={canvasRef} style={{ display: 'none' }} />
-            
+
             <button className="btn btn-primary" onClick={capturePhoto}>
               <Camera size={18} />
               {cameraError ? 'Gunakan Foto Simulasi' : 'Ambil Selfie'}
@@ -208,13 +205,12 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
           </div>
         )}
 
-        {/* STEP 2: GPS Verification */}
         {step === 2 && (
           <div>
             <p className="text-muted" style={{ marginBottom: 12 }}>
               Verifikasi lokasi kantor Anda.
             </p>
-            
+
             {photo && (
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
                 <img src={photo} alt="Selfie" style={{ width: 100, height: 100, borderRadius: 12, objectFit: 'cover', border: '2px solid var(--primary)' }} />
@@ -234,10 +230,10 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
                 <RotateCcw size={16} />
                 Foto Ulang
               </button>
-              
-              <button 
-                className="btn btn-primary" 
-                onClick={submitAttendance} 
+
+              <button
+                className="btn btn-primary"
+                onClick={submitAttendance}
                 style={{ flex: 1.5 }}
                 disabled={locLoading || isSubmitting}
               >
@@ -247,7 +243,6 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
           </div>
         )}
 
-        {/* STEP 3: Attendance Success */}
         {step === 3 && (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <CheckCircle size={60} style={{ color: 'var(--success)', marginBottom: 16 }} />
@@ -255,7 +250,7 @@ export default function AttendanceModal({ type, user, onClose, onShowToast, onSu
             <p className="text-muted" style={{ marginBottom: 24 }}>
               Data absensi {type === 'in' ? 'Masuk' : 'Pulang'} Anda telah berhasil dicatat ke sistem.
             </p>
-            
+
             <button className="btn btn-primary" onClick={() => { onSuccess(); onClose(); }}>
               Selesai
             </button>

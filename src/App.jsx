@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  User, 
-  Lock, 
-  Calendar, 
-  Shield, 
-  Clock, 
-  Smartphone, 
+import {
+  User,
+  Lock,
+  Calendar,
+  Shield,
+  Clock,
+  Smartphone,
   Sparkles,
   Briefcase
 } from 'lucide-react';
-import { 
-  loginUser, 
-  registerUser, 
-  logoutUser, 
-  getSession, 
-  getTodayStatus 
-} from './utils/mockData';
+import {
+  loginUser,
+  registerUser,
+  logoutUser,
+  getSession,
+  getTodayStatus
+} from './services/api';
 import Dashboard from './components/Dashboard';
 import History from './components/History';
 import AdminPanel from './components/AdminPanel';
@@ -24,14 +24,14 @@ import './App.css';
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'history', 'admin'
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [theme, setTheme] = useState('light');
-  const [showAttendance, setShowAttendance] = useState(null); // null, 'in', 'out'
+  const [showAttendance, setShowAttendance] = useState(null);
   const [todayStatus, setTodayStatus] = useState(null);
   const [toast, setToast] = useState(null);
-  
-  // Auth Form State
-  const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+
+  const [authMode, setAuthMode] = useState('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [regName, setRegName] = useState('');
@@ -39,45 +39,43 @@ export default function App() {
   const [regPassword, setRegPassword] = useState('');
   const [regPosition, setRegPosition] = useState('Staff');
 
-  // Load Session and Theme
   useEffect(() => {
-    const session = getSession();
-    if (session) {
-      setUser(session);
-      setTodayStatus(getTodayStatus(session.id));
-      // Default view for admin is admin panel, for employee is dashboard
-      if (session.role === 'admin') {
-        setActiveTab('admin');
-      } else {
-        setActiveTab('dashboard');
+    const initApp = async () => {
+      const savedTheme = localStorage.getItem('mabsensi_theme') || 'light';
+      setTheme(savedTheme);
+      document.documentElement.setAttribute('data-theme', savedTheme);
+
+      const session = await getSession();
+      if (session) {
+        setUser(session);
+        const status = await getTodayStatus(session.id);
+        setTodayStatus(status);
+        if (session.role === 'admin') {
+          setActiveTab('admin');
+        } else {
+          setActiveTab('dashboard');
+        }
       }
-    }
-    
-    const savedTheme = localStorage.getItem('mabsensi_theme') || 'light';
-    setTheme(savedTheme);
-    document.documentElement.setAttribute('data-theme', savedTheme);
+      setLoading(false);
+    };
+    initApp();
   }, []);
 
   const showToast = (message) => {
     setToast(message);
-    setTimeout(() => {
-      setToast(null);
-    }, 3000);
+    setTimeout(() => { setToast(null); }, 3000);
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    const res = loginUser(username, password);
+    const res = await loginUser(username, password);
     if (res.success) {
       setUser(res.user);
-      setTodayStatus(getTodayStatus(res.user.id));
+      const status = await getTodayStatus(res.user.id);
+      setTodayStatus(status);
       showToast(`Selamat datang kembali, ${res.user.name}!`);
-      
-      // Clear form
       setUsername('');
       setPassword('');
-      
-      // Redirect
       if (res.user.role === 'admin') {
         setActiveTab('admin');
       } else {
@@ -88,14 +86,14 @@ export default function App() {
     }
   };
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     if (!regName || !regUsername || !regPassword) {
       showToast("Semua field wajib diisi!");
       return;
     }
 
-    const res = registerUser({
+    const res = await registerUser({
       name: regName,
       username: regUsername,
       password: regPassword,
@@ -107,8 +105,6 @@ export default function App() {
       setAuthMode('login');
       setUsername(regUsername);
       setPassword('');
-      
-      // Reset registration form
       setRegName('');
       setRegUsername('');
       setRegPassword('');
@@ -132,18 +128,28 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', nextTheme);
   };
 
-  const refreshStatus = () => {
+  const refreshStatus = async () => {
     if (user) {
-      setTodayStatus(getTodayStatus(user.id));
+      const status = await getTodayStatus(user.id);
+      setTodayStatus(status);
     }
   };
 
-  // If not logged in, render Auth Screen
+  if (loading) {
+    return (
+      <div className="phone-wrapper" style={{ justifyContent: 'center', alignItems: 'center' }}>
+        <div className="app-screen" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <p className="text-muted">Memuat...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div className="phone-wrapper" style={{ justifyContent: 'center' }}>
         {toast && <div className="toast">{toast}</div>}
-        
+
         <div className="app-screen auth-container" style={{ paddingBottom: 24 }}>
           <div className="auth-header">
             <div className="brand-logo" style={{ margin: '0 auto 16px auto', width: 56, height: 56, borderRadius: 16 }}>
@@ -154,15 +160,14 @@ export default function App() {
           </div>
 
           <div className="card glass-card" style={{ width: '100%' }}>
-            {/* Auth Switcher Tabs */}
             <div className="tab-container" style={{ marginBottom: 20 }}>
-              <button 
+              <button
                 className={`tab-btn ${authMode === 'login' ? 'active' : ''}`}
                 onClick={() => setAuthMode('login')}
               >
                 Login
               </button>
-              <button 
+              <button
                 className={`tab-btn ${authMode === 'register' ? 'active' : ''}`}
                 onClick={() => setAuthMode('register')}
               >
@@ -176,9 +181,9 @@ export default function App() {
                   <label className="form-label">Username</label>
                   <div className="input-wrapper">
                     <User className="input-icon" size={16} />
-                    <input 
-                      type="text" 
-                      placeholder="karyawan / admin" 
+                    <input
+                      type="text"
+                      placeholder="karyawan / admin"
                       className="form-input"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
@@ -191,9 +196,9 @@ export default function App() {
                   <label className="form-label">Password</label>
                   <div className="input-wrapper">
                     <Lock className="input-icon" size={16} />
-                    <input 
-                      type="password" 
-                      placeholder="password" 
+                    <input
+                      type="password"
+                      placeholder="password"
                       className="form-input"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -212,9 +217,9 @@ export default function App() {
                   <label className="form-label">Nama Lengkap</label>
                   <div className="input-wrapper">
                     <Sparkles className="input-icon" size={16} />
-                    <input 
-                      type="text" 
-                      placeholder="Masukkan nama lengkap" 
+                    <input
+                      type="text"
+                      placeholder="Masukkan nama lengkap"
                       className="form-input"
                       value={regName}
                       onChange={(e) => setRegName(e.target.value)}
@@ -227,9 +232,9 @@ export default function App() {
                   <label className="form-label">Username Baru</label>
                   <div className="input-wrapper">
                     <User className="input-icon" size={16} />
-                    <input 
-                      type="text" 
-                      placeholder="Username unik" 
+                    <input
+                      type="text"
+                      placeholder="Username unik"
                       className="form-input"
                       value={regUsername}
                       onChange={(e) => setRegUsername(e.target.value)}
@@ -242,9 +247,9 @@ export default function App() {
                   <label className="form-label">Jabatan / Posisi</label>
                   <div className="input-wrapper">
                     <Briefcase className="input-icon" size={16} />
-                    <input 
-                      type="text" 
-                      placeholder="Contoh: Staff, Manager" 
+                    <input
+                      type="text"
+                      placeholder="Contoh: Staff, Manager"
                       className="form-input"
                       value={regPosition}
                       onChange={(e) => setRegPosition(e.target.value)}
@@ -257,9 +262,9 @@ export default function App() {
                   <label className="form-label">Password</label>
                   <div className="input-wrapper">
                     <Lock className="input-icon" size={16} />
-                    <input 
-                      type="password" 
-                      placeholder="Minimal 6 karakter" 
+                    <input
+                      type="password"
+                      placeholder="Minimal 6 karakter"
                       className="form-input"
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
@@ -285,13 +290,10 @@ export default function App() {
     );
   }
 
-  // If logged in, render App Shell
   return (
     <div className="phone-wrapper">
-      {/* Toast Notification */}
       {toast && <div className="toast">{toast}</div>}
 
-      {/* Sticky Header */}
       <header className="app-header">
         <div className="brand-section">
           <div className="brand-logo">
@@ -299,17 +301,16 @@ export default function App() {
           </div>
           <span className="brand-name">M-Absensi</span>
         </div>
-        
+
         <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>
           {user.role === 'admin' ? 'Akses Admin' : 'Akses Karyawan'}
         </span>
       </header>
 
-      {/* Main Screen Content */}
       <main className="app-screen">
         {activeTab === 'dashboard' && (
-          <Dashboard 
-            user={user} 
+          <Dashboard
+            user={user}
             onLogout={handleLogout}
             onOpenAttendance={(type) => setShowAttendance(type)}
             todayStatus={todayStatus}
@@ -318,19 +319,18 @@ export default function App() {
             toggleTheme={toggleTheme}
           />
         )}
-        
+
         {activeTab === 'history' && (
           <History user={user} />
         )}
-        
+
         {activeTab === 'admin' && user.role === 'admin' && (
           <AdminPanel onShowToast={showToast} />
         )}
       </main>
 
-      {/* Navigation - Bottom bar */}
       <nav className="bottom-nav">
-        <button 
+        <button
           className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
           onClick={() => setActiveTab('dashboard')}
         >
@@ -338,7 +338,7 @@ export default function App() {
           <span>Absen</span>
         </button>
 
-        <button 
+        <button
           className={`nav-item ${activeTab === 'history' ? 'active' : ''}`}
           onClick={() => setActiveTab('history')}
         >
@@ -347,7 +347,7 @@ export default function App() {
         </button>
 
         {user.role === 'admin' && (
-          <button 
+          <button
             className={`nav-item ${activeTab === 'admin' ? 'active' : ''}`}
             onClick={() => setActiveTab('admin')}
           >
@@ -357,9 +357,8 @@ export default function App() {
         )}
       </nav>
 
-      {/* Attendance Modal Overlay */}
       {showAttendance && (
-        <AttendanceModal 
+        <AttendanceModal
           type={showAttendance}
           user={user}
           onClose={() => setShowAttendance(null)}
